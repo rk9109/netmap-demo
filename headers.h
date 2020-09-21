@@ -30,8 +30,8 @@ struct ipv4_header {
     uint8_t  ttl;
     uint8_t  protocol;
     uint16_t checksum;
-    uint32_t src_ipv4_address;
-    uint32_t dest_ipv4_address;
+    uint8_t  src_ipv4_address[4];
+    uint8_t  dest_ipv4_address[4];
 } __attribute__((packed));
 
 //

@@ -1,19 +1,21 @@
 #include <errno.h>
 #include <poll.h>
 #include <stdarg.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
-#include <netinet/ih.h>
+#include <netinet/in.h>
 
+#include <net/if.h>
 #include <net/netmap.h>
 #define NETMAP_WITH_LIBS
 #include <net/netmap_user.h>
 
 #include "headers.h"
 
-static void error_exit(const char** fmt, ...)
+static void error_exit(const char* fmt, ...)
 {
     va_list arglist;
 
@@ -45,7 +47,7 @@ static bool ping_select(const char* buf)
     }
 
     // ignore non-icmpv4 echo packets
-    switch ((hdr->icmpv4_header).type) {
+    switch ((hdr->icmpv4_hdr).type) {
     case ICMPV4_ECHO:
         break;
     default:
@@ -62,8 +64,8 @@ static void ping_response(const char* buf)
     // swap source/destination MAC address
     for (int i = 0; i < 6; i++) {
         uint8_t tmp;
-        uint8_t* dest = (hdr->ethernet_header).dest_mac_address;
-        uint8_t* src = (hdr->ethernet_header).src_mac_address;
+        uint8_t* dest = (hdr->ethernet_hdr).dest_mac_address;
+        uint8_t* src = (hdr->ethernet_hdr).src_mac_address;
 
         tmp = dest[i];
         dest[i] = src[i];
@@ -73,8 +75,8 @@ static void ping_response(const char* buf)
     // swap source/destination IPV4 address
     for (int i = 0; i < 4; i++) {
         uint8_t tmp;
-        uint8_t* dest = (hdr->ipv4_header).dest_ipv4_address;
-        uint8_t* src = (hdr->ipv4_header).src_ipv4_address;
+        uint8_t* dest = (hdr->ipv4_hdr).dest_ipv4_address;
+        uint8_t* src = (hdr->ipv4_hdr).src_ipv4_address;
 
         tmp = dest[i];
         dest[i] = src[i];
@@ -84,7 +86,7 @@ static void ping_response(const char* buf)
     // TODO recalculate ipv4 checksum
 
     // update icmpv4 header
-    (hdr->icmpv4_header).type = ICMPV4_REPLY;
+    (hdr->icmpv4_hdr).type = ICMPV4_REPLY;
 
     // TODO recalculate icmpv4 checksum
 }
@@ -95,7 +97,7 @@ static void netmap_rx(struct nm_desc* nmd)
     uint16_t ti = nmd->first_tx_ring;
 
     // TODO document
-    for (ri <= nmd->last_rx_ring && ti <= nmd->last_tx_ring) {
+    while (ri <= nmd->last_rx_ring && ti <= nmd->last_tx_ring) {
         uint32_t nrx, ntx;
         uint32_t rx_head, tx_head;
         struct netmap_ring* rx_ring;
@@ -157,12 +159,12 @@ static void netmap_rx(struct nm_desc* nmd)
             ntx--;
         }
 
-        rx_ring->head = rx_ring->cur = rxhead;
-        tx_ring->head = tx_ring->cur = txhead;
+        rx_ring->head = rx_ring->cur = rx_head;
+        tx_ring->head = tx_ring->cur = tx_head;
     }
 }
 
-static void netmap_loop(const char** netmap_port)
+static void netmap_loop(const char* netmap_port)
 {
     struct nm_desc* nmd;
 
@@ -180,13 +182,13 @@ static void netmap_loop(const char** netmap_port)
         int ret;
         struct pollfd pfd;
 
-        pfd[0].fd = nmd->fd;
-        pfd[0].events = POLLIN;
+        pfd.fd = nmd->fd;
+        pfd.events = POLLIN;
 
         ret = poll(&pfd, 1, 1000);
         if (ret < 0) {
             error_exit("poll: %s\n", strerror(errno));
-        } else {
+        } else if (ret == 0) {
             // timeout
             continue;
         }
@@ -205,5 +207,6 @@ static void usage()
 
 int main(int argc, char** argv)
 {
-    netmap_loop("netmap:eth0");
+    (void) usage;
+    netmap_loop("netmap:em0");
 }
